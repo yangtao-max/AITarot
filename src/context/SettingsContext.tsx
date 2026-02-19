@@ -1,4 +1,5 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { useUser } from './UserContext';
 
 export type AIProvider = 'gemini' | 'deepseek' | 'qwen' | 'kimi';
 
@@ -22,18 +23,39 @@ const DEFAULT_SETTINGS: AISettings = {
 const SettingsContext = createContext<SettingsContextType | undefined>(undefined);
 
 export function SettingsProvider({ children }: { children: React.ReactNode }) {
+  const { storageKey, currentUser } = useUser();
+  const key = currentUser ? storageKey('aura_tarot_settings') : '';
+
   const [settings, setSettings] = useState<AISettings>(() => {
-    const saved = localStorage.getItem('aura_tarot_settings');
-    return saved ? JSON.parse(saved) : DEFAULT_SETTINGS;
+    if (!key) return DEFAULT_SETTINGS;
+    try {
+      const saved = localStorage.getItem(key);
+      return saved ? JSON.parse(saved) : DEFAULT_SETTINGS;
+    } catch {
+      return DEFAULT_SETTINGS;
+    }
   });
 
-  const updateSettings = (newSettings: Partial<AISettings>) => {
-    setSettings(prev => {
-      const updated = { ...prev, ...newSettings };
-      localStorage.setItem('aura_tarot_settings', JSON.stringify(updated));
-      return updated;
-    });
-  };
+  useEffect(() => {
+    if (!key) return;
+    try {
+      const saved = localStorage.getItem(key);
+      setSettings(saved ? JSON.parse(saved) : DEFAULT_SETTINGS);
+    } catch {
+      setSettings(DEFAULT_SETTINGS);
+    }
+  }, [key]);
+
+  const updateSettings = useCallback(
+    (newSettings: Partial<AISettings>) => {
+      setSettings((prev) => {
+        const updated = { ...prev, ...newSettings };
+        if (key) localStorage.setItem(key, JSON.stringify(updated));
+        return updated;
+      });
+    },
+    [key]
+  );
 
   return (
     <SettingsContext.Provider value={{ settings, updateSettings }}>

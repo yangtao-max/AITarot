@@ -12,6 +12,7 @@ export interface TarotSpread {
   category: 'daily' | 'love' | 'career' | 'general' | 'year';
   description: string;
   fullDescription: string;
+  /** 牌阵所需张数，须与 positions 长度一致（塔罗规则：每位置一牌、不重复） */
   cardCount: number;
   duration: string;
   positions: SpreadPosition[];

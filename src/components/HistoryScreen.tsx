@@ -1,9 +1,14 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import BottomNav from './BottomNav';
 import { TarotSpread } from '../constants/spreads';
 import { TarotCard } from '../constants/cards';
 import { motion, AnimatePresence } from 'motion/react';
+import ReactMarkdown from 'react-markdown';
 import { useLanguage } from '../context/LanguageContext';
+import { useUser } from '../context/UserContext';
+
+const INITIAL_VISIBLE = 7;
+const LOAD_MORE_SIZE = 7;
 
 interface TarotReading {
   id: string;
@@ -19,8 +24,13 @@ interface HistoryScreenProps {
 }
 
 export default function HistoryScreen({ onChangeTab }: HistoryScreenProps) {
+  const { storageKey, currentUser } = useUser();
+  const readingsKey = currentUser ? storageKey('tarot_readings') : '';
   const [readings, setReadings] = useState<TarotReading[]>([]);
   const [activeFilter, setActiveFilter] = useState('all');
+  const [visibleCount, setVisibleCount] = useState(INITIAL_VISIBLE);
+  const [selectedReading, setSelectedReading] = useState<TarotReading | null>(null);
+  const loadMoreRef = useRef<HTMLDivElement>(null);
   const { t } = useLanguage();
 
   const FILTER_TAGS = [
@@ -32,19 +42,45 @@ export default function HistoryScreen({ onChangeTab }: HistoryScreenProps) {
   ];
 
   useEffect(() => {
+    if (!readingsKey) {
+      setReadings([]);
+      return;
+    }
     try {
-      const saved = localStorage.getItem('tarot_readings');
-      if (saved) {
-        setReadings(JSON.parse(saved));
-      }
+      const saved = localStorage.getItem(readingsKey);
+      setReadings(saved ? JSON.parse(saved) : []);
     } catch (error) {
       console.error('Failed to load readings:', error);
+      setReadings([]);
     }
-  }, []);
+  }, [readingsKey]);
 
-  const filteredReadings = readings.filter(r => 
+  const filteredReadings = readings.filter(r =>
     activeFilter === 'all' || r.spread.category === activeFilter
   );
+  const displayReadings = filteredReadings.slice(0, visibleCount);
+  const hasMore = visibleCount < filteredReadings.length;
+
+  useEffect(() => {
+    setVisibleCount(INITIAL_VISIBLE);
+  }, [activeFilter]);
+
+  const loadMore = useCallback(() => {
+    setVisibleCount((prev) => Math.min(prev + LOAD_MORE_SIZE, filteredReadings.length));
+  }, [filteredReadings.length]);
+
+  useEffect(() => {
+    if (!hasMore || !loadMoreRef.current) return;
+    const el = loadMoreRef.current;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) loadMore();
+      },
+      { root: el.closest('main') ?? undefined, rootMargin: '100px', threshold: 0.1 }
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [hasMore, loadMore]);
 
   const formatDate = (isoString: string) => {
     const date = new Date(isoString);
@@ -68,9 +104,6 @@ export default function HistoryScreen({ onChangeTab }: HistoryScreenProps) {
             <p className="text-xs text-slate-500 dark:text-slate-400">{t('appDesc')}</p>
           </div>
         </div>
-        <button className="flex h-10 w-10 items-center justify-center rounded-full text-slate-500 hover:bg-black/5 dark:text-slate-400 dark:hover:bg-white/10 transition-colors">
-          <span className="material-symbols-outlined">filter_list</span>
-        </button>
       </header>
 
       {/* Filter Tags */}
@@ -134,7 +167,7 @@ export default function HistoryScreen({ onChangeTab }: HistoryScreenProps) {
                 <div className="h-px flex-1 bg-gray-200 dark:bg-white/10"></div>
               </div>
 
-              {filteredReadings.map((reading, index) => {
+              {displayReadings.map((reading, index) => {
                 const { dateStr, timeStr, dayStr } = formatDate(reading.timestamp);
                 return (
                   <motion.article 
@@ -170,7 +203,7 @@ export default function HistoryScreen({ onChangeTab }: HistoryScreenProps) {
                         {reading.cards.map((d, idx) => (
                           <div key={idx} className="relative aspect-[2/3] w-20 shrink-0 rounded-lg bg-gray-200 dark:bg-[#362447] overflow-hidden border border-gray-100 dark:border-white/5">
                             {d.card.image ? (
-                              <img alt={d.card.name} className="h-full w-full object-cover opacity-80 mix-blend-overlay" src={d.card.image} referrerPolicy="no-referrer" />
+                              <img alt={d.card.name} className="h-full w-full object-contain opacity-90" src={d.card.image} referrerPolicy="no-referrer" />
                             ) : (
                               <div className="w-full h-full flex items-center justify-center bg-gray-300 dark:bg-[#191121]">
                                 <span className="material-symbols-outlined text-gray-400 dark:text-white/10 text-xs">image_not_supported</span>
@@ -181,16 +214,98 @@ export default function HistoryScreen({ onChangeTab }: HistoryScreenProps) {
                           </div>
                         ))}
                       </div>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedReading(reading)}
+                        className="mt-4 w-full flex items-center justify-center gap-2 rounded-xl bg-[#7f19e6] text-white py-2.5 text-sm font-bold shadow-lg shadow-[#7f19e6]/20 transition-transform active:scale-[0.98]"
+                      >
+                        <span className="material-symbols-outlined text-lg">menu_book</span>
+                        {t('viewInterpretation')}
+                      </button>
                     </div>
                   </motion.article>
                 );
               })}
+              {hasMore && (
+                <div ref={loadMoreRef} className="py-6 flex justify-center">
+                  <span className="text-xs text-slate-400">{t('loadMore')}</span>
+                </div>
+              )}
             </motion.div>
           )}
         </AnimatePresence>
       </main>
 
       <BottomNav currentTab="history" onChangeTab={onChangeTab} theme="purple" />
+
+      {/* 解读详情弹层 */}
+      <AnimatePresence>
+        {selectedReading && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex flex-col bg-[#191121] text-white"
+          >
+            <header className="sticky top-0 z-10 flex items-center justify-between bg-[#191121]/95 px-4 py-3 backdrop-blur-md border-b border-white/10">
+              <button
+                type="button"
+                onClick={() => setSelectedReading(null)}
+                className="flex size-10 items-center justify-center rounded-full bg-white/10 text-white"
+              >
+                <span className="material-symbols-outlined">close</span>
+              </button>
+              <h2 className="text-lg font-bold truncate max-w-[60%]">{selectedReading.spread.name}</h2>
+              <div className="w-10" />
+            </header>
+            <main className="flex-1 overflow-y-auto p-4 pb-8 hide-scrollbar">
+              <div className="mb-4 rounded-xl bg-white/5 border border-white/10 p-4">
+                <p className="text-xs text-slate-400 mb-1">{t('questionHint')}</p>
+                <p className="text-sm font-medium text-slate-200">{selectedReading.question}</p>
+              </div>
+              <div className="flex gap-2 mb-6 overflow-x-auto hide-scrollbar pb-2">
+                {selectedReading.cards.map((d, idx) => (
+                  <div key={idx} className="shrink-0 text-center">
+                    <div className="relative aspect-[2/3] w-24 rounded-lg bg-[#362447] overflow-hidden border border-white/10">
+                      {d.card.image ? (
+                        <img alt={d.card.name} className="h-full w-full object-contain" src={d.card.image} referrerPolicy="no-referrer" />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center">
+                          <span className="material-symbols-outlined text-white/20">image_not_supported</span>
+                        </div>
+                      )}
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent" />
+                      <span className="absolute bottom-1 left-0 right-0 text-[10px] text-white/90 font-medium">{d.card.name}</span>
+                    </div>
+                    <p className="mt-1 text-[10px] text-slate-400">{d.position}</p>
+                  </div>
+                ))}
+              </div>
+              <div className="rounded-2xl bg-white/5 border border-white/10 p-4">
+                <h3 className="text-[#7f19e6] font-bold mb-3 flex items-center gap-2">
+                  <span className="material-symbols-outlined">auto_awesome</span>
+                  {t('interpretationResult')}
+                </h3>
+                <div className="markdown-body prose prose-invert prose-sm max-w-none text-slate-300 leading-relaxed">
+                  <ReactMarkdown
+                    components={{
+                      img: ({ node, ...props }) =>
+                        props.src ? (
+                          <img {...props} className="rounded-xl border border-white/10 my-2 max-w-[180px] aspect-[2/3] object-contain bg-black/20" referrerPolicy="no-referrer" />
+                        ) : null,
+                      p: ({ children }) => <p className="mb-4">{children}</p>,
+                      h3: ({ children }) => <h3 className="text-[#7f19e6] font-bold mt-4 mb-2">{children}</h3>,
+                      strong: ({ children }) => <strong className="text-white font-bold">{children}</strong>,
+                    }}
+                  >
+                    {selectedReading.interpretation}
+                  </ReactMarkdown>
+                </div>
+              </div>
+            </main>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

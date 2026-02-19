@@ -1,5 +1,6 @@
-import React, { createContext, useContext, useState, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
 import { TRANSLATIONS, Language } from '../constants/translations';
+import { useUser } from './UserContext';
 
 interface LanguageContextType {
   language: Language;
@@ -10,19 +11,33 @@ interface LanguageContextType {
 const LanguageContext = createContext<LanguageContextType | undefined>(undefined);
 
 export function LanguageProvider({ children }: { children: ReactNode }) {
+  const { storageKey, currentUser } = useUser();
+  const key = currentUser ? storageKey('app_language') : '';
+
   const [language, setLanguageState] = useState<Language>(() => {
-    const saved = localStorage.getItem('app_language');
+    if (!key) return 'zh';
+    const saved = localStorage.getItem(key);
     return (saved as Language) || 'zh';
   });
 
-  const setLanguage = (lang: Language) => {
-    setLanguageState(lang);
-    localStorage.setItem('app_language', lang);
-  };
+  useEffect(() => {
+    if (!key) return;
+    const saved = localStorage.getItem(key);
+    setLanguageState((saved as Language) || 'zh');
+  }, [key]);
 
-  const t = (key: keyof typeof TRANSLATIONS['zh']) => {
-    return TRANSLATIONS[language][key] || TRANSLATIONS['zh'][key];
-  };
+  const setLanguage = useCallback(
+    (lang: Language) => {
+      setLanguageState(lang);
+      if (key) localStorage.setItem(key, lang);
+    },
+    [key]
+  );
+
+  const t = useCallback(
+    (k: keyof typeof TRANSLATIONS['zh']) => TRANSLATIONS[language][k] ?? (TRANSLATIONS['zh'] as any)[k],
+    [language]
+  );
 
   return (
     <LanguageContext.Provider value={{ language, setLanguage, t }}>

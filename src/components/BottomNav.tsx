@@ -25,8 +25,9 @@ export default function BottomNav({ currentTab, onChangeTab, theme = 'purple' }:
   };
 
   return (
-    <nav className="fixed bottom-0 w-full max-w-md bg-white/95 dark:bg-[#1a2e16]/95 backdrop-blur-lg border-t border-slate-100 dark:border-slate-800 px-6 pb-6 pt-2 z-30"
-         style={{ backgroundColor: isGreen ? undefined : 'rgba(255,255,255,0.95)' }}>
+    <nav className={`fixed bottom-0 w-full max-w-md backdrop-blur-lg border-t px-6 pb-6 pt-2 z-30 ${
+      isGreen ? 'bg-white/95 dark:bg-[#1a2e16]/95 border-slate-100 dark:border-slate-800' : 'bg-white/95 dark:bg-[#191121]/95 border-slate-100 dark:border-white/5'
+    }`}>
       <div className="flex items-center justify-around">
         <button onClick={() => onChangeTab('home')} className={getTabClass('home')}>
           <span className={getIconClass('home')}>home</span>

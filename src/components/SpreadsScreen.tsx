@@ -1,13 +1,15 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import BottomNav from './BottomNav';
 import { SPREADS, TarotSpread } from '../constants/spreads';
 import { motion, AnimatePresence } from 'motion/react';
 import { useLanguage } from '../context/LanguageContext';
+import type { SpreadInitialFilter } from '../App';
 
 interface SpreadsScreenProps {
   onChangeTab: (tab: 'home' | 'spreads' | 'history' | 'profile') => void;
   onSelectSpread: (spread: TarotSpread) => void;
   onStartReading: (spread: TarotSpread) => void;
+  initialFilter?: SpreadInitialFilter | null;
 }
 
 const container = {
@@ -25,10 +27,14 @@ const item = {
   show: { opacity: 1, y: 0 }
 };
 
-export default function SpreadsScreen({ onChangeTab, onSelectSpread, onStartReading }: SpreadsScreenProps) {
+export default function SpreadsScreen({ onChangeTab, onSelectSpread, onStartReading, initialFilter = null }: SpreadsScreenProps) {
   const [searchQuery, setSearchQuery] = useState('');
-  const [activeFilter, setActiveFilter] = useState('全部');
+  const [activeFilter, setActiveFilter] = useState<string>(initialFilter ?? '全部');
   const { t } = useLanguage();
+
+  useEffect(() => {
+    if (initialFilter) setActiveFilter(initialFilter);
+  }, [initialFilter]);
 
   const filterOptions = [
     { id: '全部', label: t('all') },
@@ -39,13 +45,14 @@ export default function SpreadsScreen({ onChangeTab, onSelectSpread, onStartRead
   ];
 
   const filteredSpreads = SPREADS.filter(s => {
-    const matchesSearch = s.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+    const matchesSearch = s.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
                          s.description.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesFilter = activeFilter === '全部' || 
-                         (activeFilter === '爱情' && s.category === 'love') ||
-                         (activeFilter === '事业' && s.category === 'career') ||
-                         (activeFilter === '运势' && s.category === 'daily') ||
-                         (activeFilter === '抉择' && s.category === 'general');
+    const matchesFilter =
+      activeFilter === '全部' ||
+      (activeFilter === '爱情' && (s.category === 'love' || s.category === 'general')) ||
+      (activeFilter === '事业' && (s.category === 'career' || s.category === 'general')) ||
+      (activeFilter === '运势' && (s.category === 'daily' || s.category === 'general')) ||
+      (activeFilter === '抉择' && s.category === 'general');
     return matchesSearch && matchesFilter;
   });
 
@@ -63,21 +70,14 @@ export default function SpreadsScreen({ onChangeTab, onSelectSpread, onStartRead
         >
           <span className="material-symbols-outlined">arrow_back</span>
         </motion.button>
-        <motion.h1 
+        <motion.h1
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
           className="text-lg font-bold text-slate-900 dark:text-slate-100"
         >
           {t('selectSpread')}
         </motion.h1>
-        <motion.button 
-          initial={{ opacity: 0, x: 20 }}
-          animate={{ opacity: 1, x: 0 }}
-          whileHover={{ rotate: 90 }}
-          className="flex size-10 items-center justify-center rounded-full text-slate-900 dark:text-slate-100 hover:bg-slate-100 dark:hover:bg-white/10"
-        >
-          <span className="material-symbols-outlined">tune</span>
-        </motion.button>
+        <div className="size-10" />
       </header>
 
       {/* Search Bar */}

@@ -1,9 +1,97 @@
-// Simple SVG representations of Tarot cards to ensure no network access is needed.
-// In a real app, these would be high-quality PNG/WebP files in the public folder.
+// 优先使用本地 cardImages 目录的图片（不依赖 GVS/网络），缺失时回退为内联 SVG。
+
+const LOCAL_CARD_IMAGES_BASE = '/cardImages';
+
+/** 中文牌名 -> 本地文件名（与 cardImages 目录内一致，塔罗牌全集 78 张） */
+const LOCAL_CARD_FILENAMES: Record<string, string> = {
+  // 大阿尔卡纳 22 张
+  '愚者': 'The Fool.jpg',
+  '魔术师': 'The Magician.jpg',
+  '女祭司': 'The High Priestess.jpg',
+  '女皇': 'The Empress.jpg',
+  '皇帝': 'The Emperor.jpg',
+  '教皇': 'The Hierophant.jpg',
+  '恋人': 'The Lovers.jpg',
+  '战车': 'The Chariot.jpg',
+  '力量': 'The Strength.jpg',
+  '隐士': 'The Hermit.jpg',
+  '命运之轮': 'The Wheel of Fortune.jpg',
+  '正义': 'The Justice.jpg',
+  '倒吊人': 'The Hanged Man.jpg',
+  '死亡': 'The Death.jpg',
+  '节制': 'The Temperance.jpg',
+  '恶魔': 'The Devil.jpg',
+  '高塔': 'The Tower.jpg',
+  '星星': 'The Star.jpg',
+  '月亮': 'The Moon.jpg',
+  '太阳': 'The Sun.jpg',
+  '审判': 'The Judgement.jpg',
+  '世界': 'The World.jpg',
+  // 权杖 14 张
+  '权杖王牌': 'The Ace of Wands.jpg',
+  '权杖二': 'The Two of Wands.jpg',
+  '权杖三': '24 Three of Wands.jpg',
+  '权杖四': '25 Four of Wands.jpg',
+  '权杖五': '26 Five of Wands.jpg',
+  '权杖六': '27 Six of Wands.jpg',
+  '权杖七': '28 Seven of Wands.jpg',
+  '权杖八': '29 Eight of Wands.jpg',
+  '权杖九': '30 Nine of Wands.jpg',
+  '权杖十': '31 Ten of Wands.jpg',
+  '权杖侍从': '32 Page of Wands.jpg',
+  '权杖骑士': '33 Knight of Wands.jpg',
+  '权杖王后': '34 Queen of Wands.jpg',
+  '权杖国王': '35 King of Wands.jpg',
+  // 星币 14 张
+  '星币王牌': '36 Ace of Pentacles.jpg',
+  '星币二': '37 Two of Pentacles.jpg',
+  '星币三': '38 Three of Pentacles.jpg',
+  '星币四': '39 Four of Pentacles.jpg',
+  '星币五': '40 Five of Pentacles.jpg',
+  '星币六': '41 Six of Pentacles.jpg',
+  '星币七': '42 Seven of Pentacles.jpg',
+  '星币八': '43 Eight of Pentacles.jpg',
+  '星币九': '44 Nine of Pentacles.jpg',
+  '星币十': '45 Ten of Pentacles.jpg',
+  '星币侍从': '46 Page of Pentacles.jpg',
+  '星币骑士': '47 Knight of Pentacles.jpg',
+  '星币王后': '48 Queen of Pentacles.jpg',
+  '星币国王': '49 King of Pentacles.jpg',
+  // 圣杯 14 张
+  '圣杯王牌': '50 Ace of Cups.jpg',
+  '圣杯二': '51 Two of Cups.jpg',
+  '圣杯三': '52 Three of Cups.jpg',
+  '圣杯四': '53 Four of Cups.jpg',
+  '圣杯五': '54 Five of Cups.jpg',
+  '圣杯六': '55 Six of Cups.jpg',
+  '圣杯七': '56 Seven of Cups.jpg',
+  '圣杯八': '57 Eight of Cups.jpg',
+  '圣杯九': '58 Nine of Cups.jpg',
+  '圣杯十': '59 Ten of Cups.jpg',
+  '圣杯侍从': '60 Page of Cups.jpg',
+  '圣杯骑士': '61 Knight of Cups.jpg',
+  '圣杯王后': '62 Queen of Cups.jpg',
+  '圣杯国王': '63 King of Cups.jpg',
+  // 宝剑 14 张
+  '宝剑王牌': '64 Ace of Swords.jpg',
+  '宝剑二': '65 Two of Swords.jpg',
+  '宝剑三': '66 Three of Swords.jpg',
+  '宝剑四': '67 Four of Swords.jpg',
+  '宝剑五': '68 Five of Swords.jpg',
+  '宝剑六': '69 Six of Swords.jpg',
+  '宝剑七': '70 Seven of Swords.jpg',
+  '宝剑八': '71 Eight of Swords.jpg',
+  '宝剑九': '72 Nine of Swords.jpg',
+  '宝剑十': '73 Ten of Swords.jpg',
+  '宝剑侍从': '74 Page of Swords.jpg',
+  '宝剑骑士': '75 Knight of Swords.jpg',
+  '宝剑王后': '76 Queen of Swords.jpg',
+  '宝剑国王': '77 King of Swords.jpg',
+};
 
 const toBase64 = (str: string) => {
   try {
-    return btoa(encodeURIComponent(str).replace(/%([0-9A-F]{2})/g, (_, p1) => 
+    return btoa(encodeURIComponent(str).replace(/%([0-9A-F]{2})/g, (_, p1) =>
       String.fromCharCode(parseInt(p1, 16))
     ));
   } catch (e) {
@@ -58,28 +146,37 @@ const createCardSvg = (name: string, color: string, symbol: string) => {
   return `data:image/svg+xml;base64,${toBase64(svg)}`;
 };
 
+/** 优先返回本地 cardImages 路径，无则回退 SVG */
+function getCardImageUrl(cnName: string, svgFallback: string): string {
+  const filename = LOCAL_CARD_FILENAMES[cnName];
+  if (filename) {
+    return `${LOCAL_CARD_IMAGES_BASE}/${encodeURIComponent(filename)}`;
+  }
+  return svgFallback;
+}
+
 const createHeroSvg = () => {
   const svg = `
     <svg width="800" height="1000" viewBox="0 0 800 1000" xmlns="http://www.w3.org/2000/svg">
       <defs>
         <radialGradient id="heroGrad" cx="50%" cy="50%" r="50%" fx="50%" fy="50%">
-          <stop offset="0%" style="stop-color:#4bee2b;stop-opacity:0.3" />
-          <stop offset="70%" style="stop-color:#132210;stop-opacity:0.1" />
-          <stop offset="100%" style="stop-color:#132210;stop-opacity:0" />
+          <stop offset="0%" style="stop-color:#7f19e6;stop-opacity:0.35" />
+          <stop offset="70%" style="stop-color:#191121;stop-opacity:0.12" />
+          <stop offset="100%" style="stop-color:#0d0614;stop-opacity:0" />
         </radialGradient>
       </defs>
-      <rect width="800" height="1000" fill="#132210"/>
+      <rect width="800" height="1000" fill="#191121"/>
       <circle cx="400" cy="500" r="400" fill="url(#heroGrad)" />
       
       <!-- Sacred Geometry -->
-      <g opacity="0.2" stroke="#4bee2b" stroke-width="1" fill="none">
+      <g opacity="0.2" stroke="#7f19e6" stroke-width="1" fill="none">
         <circle cx="400" cy="500" r="300"/>
         <circle cx="400" cy="500" r="200"/>
         <path d="M400 100 L400 900 M100 500 L700 500"/>
         <path d="M188 288 L612 712 M612 288 L188 712"/>
       </g>
       
-      <text x="400" y="520" dominant-baseline="middle" text-anchor="middle" fill="#4bee2b" font-size="200" opacity="0.6">✨</text>
+      <text x="400" y="520" dominant-baseline="middle" text-anchor="middle" fill="#7f19e6" font-size="200" opacity="0.5">✨</text>
     </svg>
   `;
   return `data:image/svg+xml;base64,${toBase64(svg)}`;
@@ -87,7 +184,7 @@ const createHeroSvg = () => {
 
 export const HERO_IMAGE = createHeroSvg();
 
-export const CARD_IMAGES: Record<string, string> = {
+const svgFallbacks: Record<string, string> = {
   '愚者': createCardSvg('The Fool', '#E5E5E5', '🃏'),
   '魔术师': createCardSvg('The Magician', '#FFD700', '🪄'),
   '女祭司': createCardSvg('The High Priestess', '#C0C0C0', '🌙'),
@@ -111,3 +208,10 @@ export const CARD_IMAGES: Record<string, string> = {
   '审判': createCardSvg('Judgement', '#F5F5F5', '🎺'),
   '世界': createCardSvg('The World', '#32CD32', '🌍'),
 };
+
+export const CARD_IMAGES: Record<string, string> = Object.fromEntries(
+  Object.keys(LOCAL_CARD_FILENAMES).map((cn) => [
+    cn,
+    getCardImageUrl(cn, (svgFallbacks as Record<string, string>)[cn] ?? ''),
+  ])
+);

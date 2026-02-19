@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { TarotSpread } from '../constants/spreads';
 import { TarotCard, TAROT_CARDS } from '../constants/cards';
 import { interpretTarot } from '../services/aiService';
@@ -6,6 +6,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import ReactMarkdown from 'react-markdown';
 import { useLanguage } from '../context/LanguageContext';
 import { useSettings } from '../context/SettingsContext';
+import { useUser } from '../context/UserContext';
 
 interface ReadingScreenProps {
   spread: TarotSpread;
@@ -14,22 +15,38 @@ interface ReadingScreenProps {
 }
 
 export default function ReadingScreen({ spread, onBack, onComplete }: ReadingScreenProps) {
+  const { storageKey, currentUser } = useUser();
+  const questionKey = currentUser ? storageKey('aura_tarot_current_question') : '';
   const [step, setStep] = useState<'question' | 'draw' | 'interpreting' | 'result'>('question');
-  const [question, setQuestion] = useState(() => localStorage.getItem('aura_tarot_current_question') || '');
+  const [question, setQuestion] = useState(() => (questionKey ? localStorage.getItem(questionKey) || '' : ''));
   const [drawnCards, setDrawnCards] = useState<{ position: string; card: TarotCard }[]>([]);
   const [interpretation, setInterpretation] = useState('');
   const [isDrawing, setIsDrawing] = useState(false);
   const [isShuffling, setIsShuffling] = useState(false);
   const [hoveredCardIndex, setHoveredCardIndex] = useState<number | null>(null);
   const [showToast, setShowToast] = useState(false);
+  const [showShareMenu, setShowShareMenu] = useState(false);
   const [interpretingMessageIndex, setInterpretingMessageIndex] = useState(0);
+  const shareMenuRef = useRef<HTMLDivElement>(null);
   const { t } = useLanguage();
   const { settings } = useSettings();
 
-  // Persist question
   useEffect(() => {
-    localStorage.setItem('aura_tarot_current_question', question);
-  }, [question]);
+    if (!showShareMenu) return;
+    const close = (e: MouseEvent) => {
+      if (shareMenuRef.current && !shareMenuRef.current.contains(e.target as Node)) setShowShareMenu(false);
+    };
+    document.addEventListener('click', close);
+    return () => document.removeEventListener('click', close);
+  }, [showShareMenu]);
+
+  useEffect(() => {
+    if (questionKey) localStorage.setItem(questionKey, question);
+  }, [questionKey, question]);
+
+  useEffect(() => {
+    if (questionKey) setQuestion(localStorage.getItem(questionKey) || '');
+  }, [questionKey]);
 
   const handleStartDraw = () => {
     if (!question.trim()) {
@@ -43,17 +60,17 @@ export default function ReadingScreen({ spread, onBack, onComplete }: ReadingScr
     if (isDrawing || isShuffling || drawnCards.length >= spread.cardCount) return;
 
     setIsShuffling(true);
-    
-    // Shuffle animation
+
     setTimeout(() => {
       setIsShuffling(false);
       setIsDrawing(true);
-      
+
       setTimeout(() => {
-        const remainingCards = TAROT_CARDS.filter(c => !drawnCards.find(d => d.card.name === c.name));
+        // 塔罗规则：同一副牌内不重复抽牌（无放回），每位置一张，顺序与牌阵 positions 一致
+        const remainingCards = TAROT_CARDS.filter((c) => !drawnCards.some((d) => d.card.name === c.name));
         const randomCard = remainingCards[Math.floor(Math.random() * remainingCards.length)];
         const currentPosition = spread.positions[drawnCards.length].name;
-        
+
         setDrawnCards([...drawnCards, { position: currentPosition, card: randomCard }]);
         setIsDrawing(false);
       }, 600);
@@ -84,24 +101,24 @@ export default function ReadingScreen({ spread, onBack, onComplete }: ReadingScr
     const result = await interpretTarot(question, spread, drawnCards, settings);
     setInterpretation(result);
     setStep('result');
-    // Clear persisted question on completion
-    localStorage.removeItem('aura_tarot_current_question');
+    onComplete({ question, spread, cards: drawnCards, interpretation: result });
+    if (questionKey) localStorage.removeItem(questionKey);
   };
 
+  const shareText = `${t('shareTitle')}\n\n${t('questionHint')}: ${question}\n\n${interpretation.replace(/!\[.*?\]\(.*?\)/g, '')}`;
+
   const handleCopy = async () => {
-    const shareText = `${t('shareTitle')}\n\n${t('questionHint')}: ${question}\n\n${interpretation.replace(/!\[.*?\]\(.*?\)/g, '')}`;
     try {
       await navigator.clipboard.writeText(shareText);
       setShowToast(true);
       setTimeout(() => setShowToast(false), 2000);
+      setShowShareMenu(false);
     } catch (err) {
       console.log('Copy failed', err);
     }
   };
 
-  const handleShare = async () => {
-    const shareText = `${t('shareTitle')}\n\n${t('questionHint')}: ${question}\n\n${interpretation.replace(/!\[.*?\]\(.*?\)/g, '')}`;
-    
+  const handleShareNative = async () => {
     if (navigator.share) {
       try {
         await navigator.share({
@@ -109,6 +126,7 @@ export default function ReadingScreen({ spread, onBack, onComplete }: ReadingScr
           text: shareText,
           url: window.location.href,
         });
+        setShowShareMenu(false);
       } catch (err) {
         console.log('Share failed', err);
       }
@@ -241,7 +259,7 @@ export default function ReadingScreen({ spread, onBack, onComplete }: ReadingScr
                   >
                       <div className="aspect-[2/3] w-full rounded-lg bg-white/10 border border-white/20 overflow-hidden relative shadow-lg">
                         {d.card.image ? (
-                          <img src={d.card.image} alt={d.card.name} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                          <img src={d.card.image} alt={d.card.name} className="w-full h-full object-contain bg-black/20" referrerPolicy="no-referrer" />
                         ) : (
                           <div className="w-full h-full flex items-center justify-center bg-slate-800">
                             <span className="material-symbols-outlined text-white/20">image_not_supported</span>
@@ -323,21 +341,44 @@ export default function ReadingScreen({ spread, onBack, onComplete }: ReadingScr
                     <span className="material-symbols-outlined">auto_awesome</span>
                     <h2 className="text-lg font-bold">{t('interpretationResult')}</h2>
                   </div>
-                  <div className="flex items-center gap-3">
-                    <button 
-                      onClick={handleCopy}
-                      className="flex items-center gap-1 text-xs text-slate-400 hover:text-white transition-colors"
-                    >
-                      <span className="material-symbols-outlined text-sm">content_copy</span>
-                      {t('copy')}
-                    </button>
-                    <button 
-                      onClick={handleShare}
+                  <div className="relative flex items-center gap-3" ref={shareMenuRef}>
+                    <button
+                      type="button"
+                      onClick={() => setShowShareMenu((v) => !v)}
                       className="flex items-center gap-1 text-xs text-slate-400 hover:text-white transition-colors"
                     >
                       <span className="material-symbols-outlined text-sm">share</span>
                       {t('share')}
                     </button>
+                    <AnimatePresence>
+                      {showShareMenu && (
+                        <motion.div
+                          initial={{ opacity: 0, y: -4 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0, y: -4 }}
+                          className="absolute right-0 top-full mt-2 w-56 rounded-xl bg-[#261a32] border border-white/10 shadow-xl py-2 z-50"
+                        >
+                          <button
+                            type="button"
+                            onClick={handleCopy}
+                            className="w-full flex items-center gap-2 px-4 py-2.5 text-left text-sm text-slate-200 hover:bg-white/10 transition-colors"
+                          >
+                            <span className="material-symbols-outlined text-lg">content_copy</span>
+                            <span>{t('copyForSocial')}</span>
+                          </button>
+                          {typeof navigator !== 'undefined' && navigator.share && (
+                            <button
+                              type="button"
+                              onClick={handleShareNative}
+                              className="w-full flex items-center gap-2 px-4 py-2.5 text-left text-sm text-slate-200 hover:bg-white/10 transition-colors"
+                            >
+                              <span className="material-symbols-outlined text-lg">open_in_new</span>
+                              <span>{t('moreShare')}</span>
+                            </button>
+                          )}
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
                   </div>
                 </div>
                 <div className="markdown-body prose prose-invert prose-sm max-w-none text-slate-300 leading-relaxed">
@@ -348,7 +389,7 @@ export default function ReadingScreen({ spread, onBack, onComplete }: ReadingScr
                         return (
                           <img 
                             {...props} 
-                            className="rounded-xl border border-white/10 my-4 w-full aspect-video object-cover shadow-lg" 
+                            className="rounded-xl border border-white/10 my-4 max-w-[200px] aspect-[2/3] object-contain bg-black/20 shadow-lg" 
                             referrerPolicy="no-referrer"
                           />
                         );
@@ -364,10 +405,10 @@ export default function ReadingScreen({ spread, onBack, onComplete }: ReadingScr
               </div>
 
               <button
-                onClick={() => onComplete({ question, spread, cards: drawnCards, interpretation })}
+                onClick={onBack}
                 className="w-full h-14 rounded-2xl bg-[#7f19e6] text-white font-bold text-lg shadow-lg shadow-[#7f19e6]/30 transition-transform active:scale-95"
               >
-                {t('saveAndBack')}
+                {t('back')}
               </button>
             </motion.div>
           )}
