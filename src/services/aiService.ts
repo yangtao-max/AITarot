@@ -2,7 +2,7 @@ import { GoogleGenAI } from "@google/genai";
 import { TarotSpread } from "../constants/spreads";
 import { TarotCard } from "../constants/cards";
 import { AISettings } from "../context/SettingsContext";
-import { getDefaultGeminiKey } from "../constants/defaultApiKey";
+import { getDefaultApiKey } from "../constants/defaultApiKey";
 
 export async function interpretTarot(
   question: string,
@@ -42,7 +42,7 @@ export async function interpretTarot(
 }
 
 async function callGemini(prompt: string, settings: AISettings): Promise<string> {
-  const apiKey = settings.apiKey || getDefaultGeminiKey();
+  const apiKey = settings.apiKey;
   
   if (!apiKey) {
     return "未检测到 Gemini API Key，请在设置中配置。";
@@ -76,7 +76,8 @@ async function callOpenAICompatible(prompt: string, settings: AISettings): Promi
   const endpoint = endpoints[settings.provider];
   if (!endpoint) return "未知的服务商";
 
-  if (!settings.apiKey) {
+  const apiKey = settings.apiKey || getDefaultApiKey();
+  if (!apiKey) {
     return "请在设置中配置该模型的 API Key 以后再试。";
   }
 
@@ -85,7 +86,7 @@ async function callOpenAICompatible(prompt: string, settings: AISettings): Promi
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${settings.apiKey}`,
+        'Authorization': `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
         model: settings.model,
