@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { useUser } from './UserContext';
+import { getDefaultGeminiKey } from '../constants/defaultApiKey';
 
 export type AIProvider = 'gemini' | 'deepseek' | 'qwen' | 'kimi';
 
@@ -14,9 +15,10 @@ interface SettingsContextType {
   updateSettings: (newSettings: Partial<AISettings>) => void;
 }
 
+// 默认使用内置 Key（编码存储），不读环境变量
 const DEFAULT_SETTINGS: AISettings = {
   provider: 'gemini',
-  apiKey: '',
+  apiKey: getDefaultGeminiKey(),
   model: 'gemini-3-flash-preview',
 };
 

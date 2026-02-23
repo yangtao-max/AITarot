@@ -2,6 +2,7 @@ import { GoogleGenAI } from "@google/genai";
 import { TarotSpread } from "../constants/spreads";
 import { TarotCard } from "../constants/cards";
 import { AISettings } from "../context/SettingsContext";
+import { getDefaultGeminiKey } from "../constants/defaultApiKey";
 
 export async function interpretTarot(
   question: string,
@@ -41,7 +42,7 @@ export async function interpretTarot(
 }
 
 async function callGemini(prompt: string, settings: AISettings): Promise<string> {
-  const apiKey = settings.apiKey || process.env.GEMINI_API_KEY || "";
+  const apiKey = settings.apiKey || getDefaultGeminiKey();
   
   if (!apiKey) {
     return "未检测到 Gemini API Key，请在设置中配置。";
